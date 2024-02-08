@@ -67,22 +67,6 @@ impl Simulation {
         &self.buffs
     }
 
-    pub fn simulate(&mut self) {
-        self.custom_modules = 1;
-        self.attempts = 1;
-        let result = simulate_once();
-        let result = result
-            .into_iter()
-            .map(|item| {
-                if let Some(v) = item {
-                    return SlotState::Free(v);
-                }
-                return SlotState::None;
-            })
-            .collect::<Vec<_>>();
-        self.buffs = result;
-    }
-
     /// Reroll the buffs. Locked buffs will not change, and will use more custom modules accordingly.
     pub fn reroll(&mut self) {
         let lock_count = self.buffs.iter().fold(0, |accum, item| {
@@ -184,6 +168,11 @@ impl Simulation {
         if let SlotState::Free(buff) = &self.buffs[pos] {
             self.buffs[pos] = SlotState::Locked(buff.clone());
         }
+    }
+
+    // Force sets the buff at position as non-locked buff.
+    pub fn set_buff(&mut self, pos: usize, buff: &Buff) {
+        self.buffs[pos] = SlotState::Free(buff.clone());
     }
 
     pub fn lock_first(&mut self) {
@@ -407,6 +396,7 @@ fn simulation_num_cus_mod_for_specific() {
     );
 }
 
+// Simulate to see how many custom modules are required to get a specific set of buffs, with locking.
 fn simulation_num_cus_mods_with_locking() {
     let want: HashSet<Buff> = HashSet::from_iter([Buff::Attack, Buff::MaxAmmo]);
     let attempts = 100000;
@@ -415,6 +405,28 @@ fn simulation_num_cus_mods_with_locking() {
 
     for _ in 0..attempts {
         let mut sim = Simulation::new();
+        reroll_until_all_found_with_locking(&mut sim, &want);
+        sum_custom_mods += sim.custom_modules;
+    }
+
+    println!(
+        "To get all {:?} for {attempts} times, it required {} custom mods. That is on average {} mods per success.",
+        want, sum_custom_mods, 
+        sum_custom_mods as f64 / attempts as f64
+    );
+}
+
+fn simulation_num_cus_mods_with_certain_buffs_already_locked() {
+    let want: HashSet<Buff> = HashSet::from_iter([Buff::Attack, Buff::Elemental, Buff::MaxAmmo]);
+    let attempts = 100000;
+
+    let mut sum_custom_mods = 0;
+
+    for _ in 0..attempts {
+        let mut sim = Simulation::new();
+        sim.set_buff(0, &Buff::Attack);
+        sim.lock_first();
+
         reroll_until_all_found_with_locking(&mut sim, &want);
         sum_custom_mods += sim.custom_modules;
     }
@@ -435,12 +447,14 @@ fn main() {
     simulation_num_cus_mod_for_specific();
     println!("sim num cusmods with locking");
     simulation_num_cus_mods_with_locking();
+    println!("sim num cusmods with certain set, with locking");
+    simulation_num_cus_mods_with_certain_buffs_already_locked();
 }
 
 #[cfg(test)]
 mod test {
 
-    use itertools::{all, Itertools};
+    use itertools::Itertools;
     use more_asserts::{assert_ge, assert_le};
     use std::{collections::HashMap, vec};
 
@@ -450,7 +464,7 @@ mod test {
     fn check_distribution_10000() {
         let mut samples = vec![];
         let buffs: Vec<Buff> = Buff::iter().collect();
-        for _ in (0..10000) {
+        for _ in 0..10000 {
             let buff = choose(&buffs);
             samples.push(buff);
         }
@@ -642,5 +656,28 @@ mod test {
         sim.reroll();
 
         assert_eq!(sim.custom_modules, 3);
+    }
+
+    // Verify that locking the first slot and rerolling should consume more custom modules.
+    #[test]
+    fn locking_should_use_more_custom_modules_locking_two_slots() {
+        let mut sim = Simulation::new();
+        sim.reroll();
+        
+        assert_eq!(sim.custom_modules, 1);
+        sim.lock_first();
+
+        // Modify the buffs (internal state) so the second buff can be locked.
+        // Making sure that the second buff does not collide with the first buff.
+        if let SlotState::Locked(Buff::Attack) = sim.buffs[0] {
+            sim.set_buff(1, &Buff::MaxAmmo);
+        } else {
+            sim.set_buff(1, &Buff::Attack);
+        }
+        sim.lock_second();
+
+        sim.reroll();
+
+        assert_eq!(sim.custom_modules, 4);
     }
 }
