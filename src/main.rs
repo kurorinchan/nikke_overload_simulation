@@ -278,14 +278,15 @@ fn simulate_once() -> Vec<Option<Buff>> {
 
 fn main() {
     simulation::simulation_slots_shown_distribution();
-    println!("sim want specific");
-    simulation::simulation_want_specific();
     println!("sim num cusmods");
     simulation::simulation_num_cus_mod_for_specific();
     println!("sim num cusmods with locking");
     simulation::simulation_num_cus_mods_with_locking();
     println!("sim first desired buff locked");
     simulation::simulation_first_desired_buff_locked();
+    println!("sim second desired buff locked");
+    simulation::simulation_second_desired_buff_locked();
+    simulation::suite_two_desired_buffs();
 }
 
 #[cfg(test)]

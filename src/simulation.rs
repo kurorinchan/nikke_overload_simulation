@@ -1,5 +1,9 @@
 
+use itertools::join;
+
 use crate::*;
+
+const DEFAULT_ATTEMPTS : u32 = 100000;
 
 fn simulation_results_to_buffs(sim_results: &[Option<Buff>]) -> Vec<Buff> {
     sim_results.iter().filter_map(Option::clone).collect()
@@ -30,30 +34,50 @@ pub fn simulation_slots_shown_distribution() {
     println!("Percentage of buffs {:.2}% {:.2}% {:.2}%", one, two, three);
 }
 
+fn sim_want_two_buffs(want: &[Buff]) {
+    let want : HashSet<&Buff> = HashSet::from_iter(want);
+    let attempts = DEFAULT_ATTEMPTS;
+
+    let mut hits = 0;
+    for _ in 0..attempts {
+        let mut sim = Simulation::new();
+        sim.reroll();
+        let mut found = HashSet::new();
+        for b in want.iter() {
+            if sim.has_buff(b) {
+                found.insert(*b);
+            }
+        }
+
+        if found.eq(&want) {
+            hits += 1;
+        }
+    }
+
+    println!(
+        "To get buffs {:?}. \
+        The simulation ran {attempts} rerolls, which {hits} had \
+        all the buffs. This is about {:.2}%.",
+        want, hits as f64 / attempts as f64 * 100.0);
+}
+
+// A suite of simluations.
+// There are two types of buffs, those that appear 10% of the time and those that appear 12%.
+// This suite runs a few simluations.
+// Simulation that aims for 10% and 10% buffs.
+// Simulation that aims for 10% and 12% buffs.
+// Simulation that aims for 12% and 12% buffs.
+
 // The number of attempts required to get all the wanted buffs, without locking.
 // For example if you want Attack and ChargeSpeed. This simulation checks how many rolls
 // got you all the buffs that you want. Divide that number by the total attempts should get us
 // the probability.
-pub fn simulation_want_specific() {
-    let want: HashSet<Buff> = [Buff::Attack, Buff::ChargeSpeed].into_iter().collect();
-    let attempts = 100000;
-
-    let mut hits = 0;
-    for _ in 0..attempts {
-        let result = simulate_once();
-        let result = simulation_results_to_buffs(&result);
-        let result: Vec<&Buff> = result
-            .into_iter()
-            .filter_map(|item| want.get(&item))
-            .collect();
-        if result.len() == want.len() {
-            hits += 1;
-        }
-    }
-    println!(
-        "Out of {attempts}, {hits} containted the wanted buffs. That is {}%",
-        hits as f64 / attempts as f64 * 100.0
-    );
+pub fn suite_two_desired_buffs() {
+    println!("Start suite: two desired buffs.");
+    sim_want_two_buffs(&[Buff::Attack, Buff::Elemental]);
+    sim_want_two_buffs(&[Buff::Attack, Buff::MaxAmmo]);
+    sim_want_two_buffs(&[Buff::ChargeDamage, Buff::ChargeSpeed]);
+    println!("End suite: two desired buffs.");
 }
 
 fn reroll_until_all_found(sim: &mut Simulation, want: &HashSet<Buff>) {
@@ -139,14 +163,14 @@ pub fn simulation_num_cus_mods_with_locking() {
 
 // Find custom module usage given that a desired buff is locked on the firsr slot.
 pub fn simulation_first_desired_buff_locked() {
-    let want: HashSet<Buff> = HashSet::from_iter([Buff::Attack, Buff::Elemental, Buff::MaxAmmo]);
+    let want: HashSet<Buff> = HashSet::from_iter([Buff::Attack, Buff::MaxAmmo]);
     let attempts = 100000;
 
     let mut sum_custom_mods = 0;
 
     for _ in 0..attempts {
         let mut sim = Simulation::new();
-        sim.set_buff(0, &Buff::Attack);
+        sim.set_buff(0, &Buff::MaxAmmo);
         sim.lock_first();
 
         reroll_until_all_found_with_locking(&mut sim, &want);
@@ -160,3 +184,30 @@ pub fn simulation_first_desired_buff_locked() {
     );
 }
 
+
+// Find custom module usage given that a desired buff is locked on the second slot.
+pub fn simulation_second_desired_buff_locked() {
+    let want: HashSet<Buff> = HashSet::from_iter([Buff::Attack, Buff::MaxAmmo]);
+    let attempts = 100000;
+
+    let mut sum_custom_mods = 0;
+    let mut sum_rerolls = 0;
+
+    for _ in 0..attempts {
+        let mut sim = Simulation::new();
+        sim.set_buff(1, &Buff::MaxAmmo);
+        sim.lock_second();
+
+        reroll_until_all_found_with_locking(&mut sim, &want);
+        sum_custom_mods += sim.custom_modules;
+        sum_rerolls += sim.attempts;
+    }
+
+    println!(
+        "To get all {:?} for {attempts} times, it required {} custom mods and {} rerolls.\n\
+        That is on average {} mods per success and {} rerolls.",
+        want, sum_custom_mods, sum_rerolls,
+        sum_custom_mods as f64 / attempts as f64,
+        sum_rerolls as f64/attempts as f64,
+    );
+}
