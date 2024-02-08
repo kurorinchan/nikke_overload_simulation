@@ -170,7 +170,16 @@ impl Simulation {
         })
     }
 
-    fn lock(&mut self, pos: usize) {
+    pub fn position_of(&self, buff:&Buff) -> Option<usize> {
+        self.buffs.iter().position(|state| {
+            match state {
+                SlotState::Free(b) | SlotState::Locked(b) => b.eq(buff),
+                _ => false,
+            }
+        })
+    }
+
+    pub fn lock(&mut self, pos: usize) {
         assert_lt!(pos, self.buffs.len());
         if let SlotState::Free(buff) = &self.buffs[pos] {
             self.buffs[pos] = SlotState::Locked(buff.clone());
@@ -352,6 +361,27 @@ fn reroll_until_all_found(sim: &mut Simulation, want: &HashSet<Buff>) {
     }
 }
 
+fn reroll_until_all_found_with_locking(sim: &mut Simulation, want: &HashSet<Buff>) {
+    loop {
+        sim.reroll();
+        let mut found = HashSet::new();
+
+        for b in want.iter() {
+            if sim.has_buff(b) {
+                let pos = sim.position_of(b).unwrap();
+                //if pos == 0 {
+                    sim.lock(pos);
+                //}
+                found.insert(b.clone());
+            }
+        }
+
+        if want.eq(&found) {
+            break;
+        }
+    }
+}
+
 // Simulation to see how many custom modules are required to get all buffs without locking.
 // For example if you want Attack and ChargeSpeed. This simulation checks how many custom modules
 // are used to got you all the buffs that you want.
@@ -359,8 +389,8 @@ fn reroll_until_all_found(sim: &mut Simulation, want: &HashSet<Buff>) {
 // locking.
 // Oddly this does not match with the simulation that gets the probability of getting all buffs.
 fn simulation_num_cus_mod_for_specific() {
-    let want: HashSet<Buff> = HashSet::from_iter([Buff::Attack, Buff::ChargeSpeed]);
-    let attempts = 10000;
+    let want: HashSet<Buff> = HashSet::from_iter([Buff::Attack, Buff::MaxAmmo]);
+    let attempts = 100000;
 
     let mut sum_custom_mods = 0;
 
@@ -371,7 +401,26 @@ fn simulation_num_cus_mod_for_specific() {
     }
 
     println!(
-        "To get all {:?} for {attempts} times, it required {} custom mods. That is on average {} rolls.",
+        "To get all {:?} for {attempts} times, it required {} custom mods. That is on average {} mods per success.",
+        want, sum_custom_mods, 
+        sum_custom_mods as f64 / attempts as f64
+    );
+}
+
+fn simulation_num_cus_mods_with_locking() {
+    let want: HashSet<Buff> = HashSet::from_iter([Buff::Attack, Buff::MaxAmmo]);
+    let attempts = 100000;
+
+    let mut sum_custom_mods = 0;
+
+    for _ in 0..attempts {
+        let mut sim = Simulation::new();
+        reroll_until_all_found_with_locking(&mut sim, &want);
+        sum_custom_mods += sim.custom_modules;
+    }
+
+    println!(
+        "To get all {:?} for {attempts} times, it required {} custom mods. That is on average {} mods per success.",
         want, sum_custom_mods, 
         sum_custom_mods as f64 / attempts as f64
     );
@@ -384,6 +433,8 @@ fn main() {
     simulation_want_specific();
     println!("sim num cusmods");
     simulation_num_cus_mod_for_specific();
+    println!("sim num cusmods with locking");
+    simulation_num_cus_mods_with_locking();
 }
 
 #[cfg(test)]
@@ -577,5 +628,19 @@ mod test {
         };
 
         assert!(sim.has_buff(buff));
+    }
+
+    // Verify that locking the first slot and rerolling should consume more custom modules.
+    #[test]
+    fn locking_should_use_more_custom_modules() {
+        let mut sim = Simulation::new();
+        sim.reroll();
+        
+        assert_eq!(sim.custom_modules, 1);
+
+        sim.lock_first();
+        sim.reroll();
+
+        assert_eq!(sim.custom_modules, 3);
     }
 }
