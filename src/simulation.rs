@@ -71,7 +71,7 @@ pub fn simulation_slots_shown_distribution() {
 // For example if you want Attack and ChargeSpeed. This simulation checks how many rolls
 // got you all the buffs that you want. Divide that number by the total attempts should get us
 // the probability.
-fn sim_want_two_buffs(want: &[Buff]) {
+fn sim_want_buffs(want: &[Buff]) {
     let want: HashSet<Buff> = HashSet::from_iter(want.iter().copied());
     let attempts = DEFAULT_ATTEMPTS;
 
@@ -106,14 +106,26 @@ fn sim_want_two_buffs(want: &[Buff]) {
 // Simulation that aims for 10% and 10% buffs.
 // Simulation that aims for 10% and 12% buffs.
 // Simulation that aims for 12% and 12% buffs.
-pub fn suite_two_desired_buffs() {
+pub fn suite_desired_buff_percent() {
     let _suite_print = SuitePrint::new(
-        "two desired buffs",
-        "The following tests report how likely (probability) two desired buffs appear.",
+        "desired buffs",
+        "The following tests report how likely (probability) two or more desired buffs appear.",
     );
-    sim_want_two_buffs(&[Buff::Attack, Buff::Elemental]);
-    sim_want_two_buffs(&[Buff::Attack, Buff::MaxAmmo]);
-    sim_want_two_buffs(&[Buff::ChargeDamage, Buff::ChargeSpeed]);
+    // 10%, 10%
+    sim_want_buffs(&[Buff::Attack, Buff::Elemental]);
+    // 10%, 12%
+    sim_want_buffs(&[Buff::Attack, Buff::MaxAmmo]);
+    // 12%, 12%
+    sim_want_buffs(&[Buff::ChargeDamage, Buff::ChargeSpeed]);
+
+    // 10%, 10%, 10%
+    sim_want_buffs(&[Buff::Attack, Buff::Elemental, Buff::CritDamage]);
+    // 10%, 10%, 12%
+    sim_want_buffs(&[Buff::Attack, Buff::Elemental, Buff::ChargeSpeed]);
+    // 10%, 12%, 12%
+    sim_want_buffs(&[Buff::Attack, Buff::MaxAmmo, Buff::ChargeSpeed]);
+    // 12%, 12%, 12%
+    sim_want_buffs(&[Buff::ChargeDamage, Buff::MaxAmmo, Buff::ChargeSpeed]);
 }
 
 // Rerolls without locking. Rerolls until all the buffs within |want| is

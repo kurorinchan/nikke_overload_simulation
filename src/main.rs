@@ -254,7 +254,7 @@ fn additional_slots() -> AdditionalSlots {
 
 fn main() {
     simulation::simulation_slots_shown_distribution();
-    simulation::suite_two_desired_buffs();
+    simulation::suite_desired_buff_percent();
     simulation::suite_two_desired_buffs_custom_mod_usage();
     simulation::suite_two_desired_buffs_custom_mod_usage_with_locking();
     simulation::suite_simulation_first_slot_buff_locked();
