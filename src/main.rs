@@ -8,7 +8,9 @@ use strum_macros::EnumIter;
 
 mod simulation;
 
-#[derive(Assoc, EnumIter, Clone, Debug, PartialEq, Eq, Hash)]
+const CUSTOM_MOD_USED_FOR_LOCKING: i32 = 2;
+
+#[derive(Assoc, EnumIter, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[func(pub fn percent(&self) -> f64)]
 enum Buff {
     #[assoc(percent = 10.0)]
@@ -165,6 +167,7 @@ impl Simulation {
         assert_lt!(pos, self.buffs.len());
         if let SlotState::Free(buff) = &self.buffs[pos] {
             self.buffs[pos] = SlotState::Locked(buff.clone());
+            self.custom_modules += CUSTOM_MOD_USED_FOR_LOCKING;
         }
     }
 
@@ -231,51 +234,6 @@ fn additional_slots() -> AdditionalSlots {
     AdditionalSlots::None
 }
 
-/// Returns a list of buffs for one off simulation.
-///
-/// The return value will always be 3 elements.
-/// The first element always contains a value.
-/// The second or third element may contain values. Also third element may be persent by not
-/// the second. E.g. (Buff1, None, Buff2).
-fn simulate_once() -> Vec<Option<Buff>> {
-    let mut drawn_buffs = vec![];
-    let mut buffs: Vec<Buff> = Buff::iter().collect();
-
-    let extra_slots = additional_slots();
-    let first_buff = choose(&buffs);
-    buffs.retain(|b| b != &first_buff);
-    drawn_buffs.push(Some(first_buff));
-
-    if extra_slots == AdditionalSlots::None {
-        drawn_buffs.push(None);
-        drawn_buffs.push(None);
-        return drawn_buffs;
-    }
-
-    let another_buff = choose(&buffs);
-    buffs.retain(|b| b != &another_buff);
-    if extra_slots == AdditionalSlots::SecondOnly {
-        drawn_buffs.push(Some(another_buff));
-        drawn_buffs.push(None);
-        return drawn_buffs;
-    }
-
-    if extra_slots == AdditionalSlots::ThirdOnly {
-        drawn_buffs.push(None);
-        drawn_buffs.push(Some(another_buff));
-        return drawn_buffs;
-    }
-
-    // Case where all slots filled.
-    drawn_buffs.push(Some(another_buff));
-
-    let another_buff = choose(&buffs);
-    buffs.retain(|b| b != &another_buff);
-    drawn_buffs.push(Some(another_buff));
-
-    drawn_buffs
-}
-
 fn main() {
     simulation::simulation_slots_shown_distribution();
     println!("sim num cusmods");
@@ -332,62 +290,6 @@ mod test {
         assert_eq!(counts.len(), 2);
         assert!(counts.contains_key(&Buff::Attack));
         assert!(counts.contains_key(&Buff::Elemental));
-    }
-
-    #[test]
-    fn sim_once() {
-        for _ in 0..10000 {
-            let r = simulate_once();
-            assert_eq!(r.len(), 3);
-        }
-    }
-
-    #[test]
-    fn can_happen_three_slots() {
-        for _ in 0..10000 {
-            let r = simulate_once();
-            assert_eq!(r.len(), 3);
-
-            if r[0].is_some() && r[1].is_some() && r[2].is_some() {
-                return;
-            }
-        }
-        panic!("Should have seen three slots.");
-    }
-
-    #[test]
-    fn can_happen_second_slot_missing() {
-        for _ in 0..10000 {
-            let r = simulate_once();
-            assert_eq!(r.len(), 3);
-
-            if r[0].is_some() && r[1].is_none() && r[2].is_some() {
-                return;
-            }
-        }
-        panic!("Should have seen second slot missing.");
-    }
-
-    #[test]
-    fn can_happen_third_slot_missing() {
-        for _ in 0..10000 {
-            let r = simulate_once();
-            assert_eq!(r.len(), 3);
-
-            if r[0].is_some() && r[1].is_some() && r[2].is_none() {
-                return;
-            }
-        }
-        panic!("Should have seen third slot missing.");
-    }
-
-    #[test]
-    fn first_slot_always_filled() {
-        for _ in 0..10000 {
-            let r = simulate_once();
-            assert_eq!(r.len(), 3);
-            assert!(r[0].is_some());
-        }
     }
 
     #[test]

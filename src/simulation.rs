@@ -5,8 +5,14 @@ use crate::*;
 
 const DEFAULT_ATTEMPTS : u32 = 100000;
 
-fn simulation_results_to_buffs(sim_results: &[Option<Buff>]) -> Vec<Buff> {
-    sim_results.iter().filter_map(Option::clone).collect()
+fn buffs_to_string<'a, I>(buffs: I) -> String 
+where
+I: Iterator<Item = &'a Buff>
+{
+    buffs.map(|item| {
+        format!(
+            "{:?}({}%)", item, item.percent())
+    }).collect::<Vec<String>>().join(" ")
 }
 
 // This is more of a check/test than a simluation.
@@ -19,9 +25,15 @@ pub fn simulation_slots_shown_distribution() {
 
     let mut tally = [0, 0, 0];
     for _ in 0..attempts {
-        let result = simulate_once();
-        let result = simulation_results_to_buffs(&result);
-        tally[result.len() - 1] += 1;
+        let mut sim = Simulation::new();
+        sim.reroll();
+        let num_buffs = sim.buffs().iter().filter_map(|item| {
+            match item {
+                SlotState::Free(b) | SlotState::Locked(b) => Some(b),
+                _ => None,
+            }
+        }).count();
+        tally[num_buffs - 1] += 1;
     }
 
     println!("Tally of buff nums! {:?}", tally);
@@ -34,8 +46,12 @@ pub fn simulation_slots_shown_distribution() {
     println!("Percentage of buffs {:.2}% {:.2}% {:.2}%", one, two, three);
 }
 
+// The number of attempts required to get all the wanted buffs, without locking.
+// For example if you want Attack and ChargeSpeed. This simulation checks how many rolls
+// got you all the buffs that you want. Divide that number by the total attempts should get us
+// the probability.
 fn sim_want_two_buffs(want: &[Buff]) {
-    let want : HashSet<&Buff> = HashSet::from_iter(want);
+    let want : HashSet<Buff> = HashSet::from_iter(want.iter().copied());
     let attempts = DEFAULT_ATTEMPTS;
 
     let mut hits = 0;
@@ -55,10 +71,11 @@ fn sim_want_two_buffs(want: &[Buff]) {
     }
 
     println!(
-        "To get buffs {:?}. \
+        "To get buffs {}. \
         The simulation ran {attempts} rerolls, which {hits} had \
         all the buffs. This is about {:.2}%.",
-        want, hits as f64 / attempts as f64 * 100.0);
+        buffs_to_string(want.iter())
+        , hits as f64 / attempts as f64 * 100.0);
 }
 
 // A suite of simluations.
@@ -68,10 +85,6 @@ fn sim_want_two_buffs(want: &[Buff]) {
 // Simulation that aims for 10% and 12% buffs.
 // Simulation that aims for 12% and 12% buffs.
 
-// The number of attempts required to get all the wanted buffs, without locking.
-// For example if you want Attack and ChargeSpeed. This simulation checks how many rolls
-// got you all the buffs that you want. Divide that number by the total attempts should get us
-// the probability.
 pub fn suite_two_desired_buffs() {
     println!("Start suite: two desired buffs.");
     sim_want_two_buffs(&[Buff::Attack, Buff::Elemental]);
@@ -135,8 +148,8 @@ pub fn simulation_num_cus_mod_for_specific() {
     }
 
     println!(
-        "To get all {:?} for {attempts} times, it required {} custom mods. That is on average {} mods per success.",
-        want, sum_custom_mods, 
+        "To get all {} for {attempts} times, it required {} custom mods. That is on average {} mods per success.",
+        buffs_to_string(want.iter()), sum_custom_mods, 
         sum_custom_mods as f64 / attempts as f64
     );
 }
