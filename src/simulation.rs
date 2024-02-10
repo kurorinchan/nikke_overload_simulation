@@ -4,8 +4,8 @@ use crate::*;
 
 const DEFAULT_ATTEMPTS: u32 = 100000;
 
-const START_SUITE_MARKER: &'static str = "===== START =====";
-const END_SUITE_MARKER: &'static str = "=====  END  =====";
+const START_SUITE_MARKER: &'static str = "===== SUITE START =====";
+const END_SUITE_MARKER: &'static str = "=====  SUITE END  =====";
 
 fn buffs_to_string<'a, I>(buffs: I) -> String
 where
@@ -14,7 +14,7 @@ where
     buffs
         .map(|item| format!("{:?}({}%)", item, item.percent()))
         .collect::<Vec<String>>()
-        .join(" ")
+        .join(" and ")
 }
 
 struct SuitePrint {}
@@ -232,9 +232,89 @@ pub fn suite_two_desired_buffs_custom_mod_usage_with_locking() {
     simulation_num_cus_mods_with_locking(&[Buff::ChargeDamage, Buff::ChargeSpeed]);
 }
 
-// Find custom module usage given that a desired buff is locked on the firsr slot.
-pub fn simulation_first_desired_buff_locked() {
-    let want: HashSet<Buff> = HashSet::from_iter([Buff::Attack, Buff::MaxAmmo]);
+/// Find custom module usage given that a desired buff is locked on the first slot.
+///
+/// #Arguments
+/// * `locked_buff` - Desired buff. The simulation runs given that this buff is locked.
+/// * `want_rest` - The list wanted buffs. It is safe to exclude the buff specified in
+///                `locked_buff`.
+pub fn simulation_first_desired_buff_locked(locked_buff: Buff, want_rest: &[Buff]) {
+    simulation_with_locked_buff(locked_buff, 0, want_rest)
+}
+
+pub fn suite_simulation_first_slot_buff_locked() {
+    let _suite_print = SuitePrint::new(
+        "Simulate first desired buff locked",
+        "The following tests report how many custom modules \
+        were used to get the desired buffs. \
+        This assumes that the desired buff appeard on the FIRST slot on the first roll and \
+        locked immediately. \
+        When a desired buff appears, they are immediately locked. \
+        The cost of locking a module (2+) is accounted.",
+    );
+
+    // Two buffs.
+    simulation_first_desired_buff_locked(Buff::Attack, &[Buff::Elemental]);
+    simulation_first_desired_buff_locked(Buff::Attack, &[Buff::MaxAmmo]);
+    simulation_first_desired_buff_locked(Buff::ChargeDamage, &[Buff::Attack]);
+    simulation_first_desired_buff_locked(Buff::ChargeDamage, &[Buff::ChargeSpeed]);
+
+    // Three buffs.
+    // 10%, [10%, 10%].
+    simulation_first_desired_buff_locked(Buff::Attack, &[Buff::Elemental, Buff::CritDamage]);
+    // 10%, [10%, 12%].
+    simulation_first_desired_buff_locked(Buff::Attack, &[Buff::Elemental, Buff::MaxAmmo]);
+    // 10%, [12%, 12%].
+    simulation_first_desired_buff_locked(Buff::Attack, &[Buff::MaxAmmo, Buff::CritDamage]);
+
+    // 12%, [10%, 10%].
+    simulation_first_desired_buff_locked(Buff::ChargeDamage, &[Buff::Attack, Buff::Elemental]);
+    // 12%, [10%, 12%].
+    simulation_first_desired_buff_locked(Buff::ChargeDamage, &[Buff::Attack, Buff::MaxAmmo]);
+    // 12%, [12%, 12%].
+    simulation_first_desired_buff_locked(Buff::ChargeDamage, &[Buff::MaxAmmo, Buff::ChargeSpeed]);
+}
+
+// Find custom module usage given that a desired buff is locked on the second slot.
+pub fn simulation_second_desired_buff_locked(locked_buff: Buff, want_rest: &[Buff]) {
+    simulation_with_locked_buff(locked_buff, 1, want_rest)
+}
+
+pub fn suite_simulation_second_slot_buff_locked() {
+    let _suite_print = SuitePrint::new(
+        "Simulate second desired buff locked",
+        "The following tests report how many custom modules \
+        were used to get the desired buffs. \
+        This assumes that the desired buff appeard on the SECOND slot on the first roll and \
+        locked immediately. \
+        When a desired buff appears, they are immediately locked. \
+        The cost of locking a module (2+) is accounted.",
+    );
+
+    // Two buffs.
+    simulation_second_desired_buff_locked(Buff::Attack, &[Buff::Elemental]);
+    simulation_second_desired_buff_locked(Buff::Attack, &[Buff::MaxAmmo]);
+    simulation_second_desired_buff_locked(Buff::ChargeDamage, &[Buff::Attack]);
+    simulation_second_desired_buff_locked(Buff::ChargeDamage, &[Buff::ChargeSpeed]);
+
+    // Three buffs.
+    // 10%, [10%, 10%].
+    simulation_second_desired_buff_locked(Buff::Attack, &[Buff::Elemental, Buff::CritDamage]);
+    // 10%, [10%, 12%].
+    simulation_second_desired_buff_locked(Buff::Attack, &[Buff::Elemental, Buff::MaxAmmo]);
+    // 10%, [12%, 12%].
+    simulation_second_desired_buff_locked(Buff::Attack, &[Buff::MaxAmmo, Buff::CritDamage]);
+
+    // 12%, [10%, 10%].
+    simulation_second_desired_buff_locked(Buff::ChargeDamage, &[Buff::Attack, Buff::Elemental]);
+    // 12%, [10%, 12%].
+    simulation_second_desired_buff_locked(Buff::ChargeDamage, &[Buff::Attack, Buff::MaxAmmo]);
+    // 12%, [12%, 12%].
+    simulation_second_desired_buff_locked(Buff::ChargeDamage, &[Buff::MaxAmmo, Buff::ChargeSpeed]);
+}
+
+pub fn simulation_with_locked_buff(locked_buff: Buff, position: usize, want_rest: &[Buff]) {
+    let want: HashSet<Buff> = HashSet::from_iter(want_rest.iter().copied());
     let attempts = 100000;
 
     let mut sum_custom_mods = 0;
@@ -243,17 +323,20 @@ pub fn simulation_first_desired_buff_locked() {
         let mut sim = Simulation::new();
         // Rolling first so that it uses a module.
         sim.reroll();
-        sim.set_buff(0, &Buff::MaxAmmo);
-        sim.lock_first();
+        sim.set_buff(position, &locked_buff);
+        sim.lock(position);
 
         reroll_until_all_found_with_locking(&mut sim, &want);
         sum_custom_mods += sim.custom_modules;
     }
 
     println!(
-        "To get all {} for {} times:\n\
+        "With {} locked on slot {} \
+        plus getting {} for {} times:\n\
         \t{} custom mods were used.\n\
         \tThat is on average {} modules .",
+        buffs_to_string([locked_buff].iter()),
+        position + 1,
         buffs_to_string(want.iter()),
         attempts,
         sum_custom_mods,
@@ -261,32 +344,62 @@ pub fn simulation_first_desired_buff_locked() {
     );
 }
 
-// Find custom module usage given that a desired buff is locked on the second slot.
-pub fn simulation_second_desired_buff_locked() {
-    let want: HashSet<Buff> = HashSet::from_iter([Buff::Attack, Buff::MaxAmmo]);
-    let attempts = 100000;
+pub fn suite_simulation_third_slot_buff_locked() {
+    let _suite_print = SuitePrint::new(
+        "Simulate third desired buff locked",
+        "The following tests report how many custom modules \
+        were used to get the desired buffs. \
+        This assumes that the desired buff appeard on the THIRD slot on the first roll and \
+        locked immediately. \
+        When a desired buff appears, they are immediately locked. \
+        The cost of locking a module (2+) is accounted.",
+    );
 
-    let mut sum_custom_mods = 0;
-    let mut sum_rerolls = 0;
+    const SLOT_POSITION: usize = 2;
 
-    for _ in 0..attempts {
-        let mut sim = Simulation::new();
-        sim.set_buff(1, &Buff::MaxAmmo);
-        sim.lock_second();
+    // Two buffs.
+    simulation_with_locked_buff(Buff::Attack, SLOT_POSITION, &[Buff::Elemental]);
+    simulation_with_locked_buff(Buff::Attack, SLOT_POSITION, &[Buff::MaxAmmo]);
+    simulation_with_locked_buff(Buff::ChargeDamage, SLOT_POSITION, &[Buff::Attack]);
+    simulation_with_locked_buff(Buff::ChargeDamage, SLOT_POSITION, &[Buff::ChargeSpeed]);
 
-        reroll_until_all_found_with_locking(&mut sim, &want);
-        sum_custom_mods += sim.custom_modules;
-        sum_rerolls += sim.attempts;
-    }
+    // Three buffs.
+    // 10%, [10%, 10%].
+    simulation_with_locked_buff(
+        Buff::Attack,
+        SLOT_POSITION,
+        &[Buff::Elemental, Buff::CritDamage],
+    );
+    // 10%, [10%, 12%].
+    simulation_with_locked_buff(
+        Buff::Attack,
+        SLOT_POSITION,
+        &[Buff::Elemental, Buff::MaxAmmo],
+    );
+    // 10%, [12%, 12%].
+    simulation_with_locked_buff(
+        Buff::Attack,
+        SLOT_POSITION,
+        &[Buff::MaxAmmo, Buff::CritDamage],
+    );
 
-    println!(
-        "To get all {:?} for {attempts} times, it required {} custom mods and {} rerolls.\n\
-        That is on average {} mods per success and {} rerolls.",
-        want,
-        sum_custom_mods,
-        sum_rerolls,
-        sum_custom_mods as f64 / attempts as f64,
-        sum_rerolls as f64 / attempts as f64,
+    // 12%, [10%, 10%].
+    simulation_with_locked_buff(
+        Buff::ChargeDamage,
+        SLOT_POSITION,
+        &[Buff::Attack, Buff::Elemental],
+    );
+    // 12%, [10%, 12%].
+    simulation_with_locked_buff(
+        Buff::ChargeDamage,
+        SLOT_POSITION,
+        &[Buff::Attack, Buff::MaxAmmo],
+    );
+    // 12%, [12%, 12%].
+    simulation_with_locked_buff(
+        Buff::ChargeDamage,
+        SLOT_POSITION,
+        &[Buff::MaxAmmo, Buff::ChargeSpeed],
     );
 }
 
