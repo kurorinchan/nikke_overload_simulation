@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, mem::ManuallyDrop};
 
 use enum_assoc::Assoc;
 use more_asserts::assert_lt;
@@ -8,7 +8,7 @@ use strum_macros::EnumIter;
 
 mod simulation;
 
-const CUSTOM_MOD_USED_FOR_LOCKING: i32 = 2;
+const MAX_LOCK_COUNT: i32 = 2;
 
 #[derive(Assoc, EnumIter, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[func(pub fn percent(&self) -> f64)]
@@ -71,12 +71,7 @@ impl Simulation {
 
     /// Reroll the buffs. Locked buffs will not change, and will use more custom modules accordingly.
     pub fn reroll(&mut self) {
-        let lock_count = self.buffs.iter().fold(0, |accum, item| {
-            if let SlotState::Locked(_) = item {
-                return accum + 1;
-            }
-            accum
-        });
+        let lock_count = self.locked_count();
 
         let cus_mod_usage = lock_count + 1;
 
@@ -163,17 +158,39 @@ impl Simulation {
         })
     }
 
+    // Locks the buff if there is a buf and is not locked already. This uses
+    // custom modules on lock.
     pub fn lock(&mut self, pos: usize) {
         assert_lt!(pos, self.buffs.len());
-        if let SlotState::Free(buff) = &self.buffs[pos] {
-            self.buffs[pos] = SlotState::Locked(buff.clone());
-            self.custom_modules += CUSTOM_MOD_USED_FOR_LOCKING;
+        let locked_count = self.locked_count();
+        // It does not make sense to lock the third slot. Just don't reroll.
+        // Note that this could happen in simluation code, just ignore it as it should have reached
+        // a terminating condition.
+        if locked_count >= MAX_LOCK_COUNT {
+            return;
         }
+
+        if let SlotState::Free(buff) = &self.buffs[pos] {
+            self.buffs[pos] = SlotState::Locked(*buff);
+            // Note that the locked count was calculated before locking with the statement above,
+            // so +2 here.
+            self.custom_modules += locked_count + 2;
+        }
+    }
+
+    fn locked_count(&self) -> i32 {
+        self.buffs
+            .iter()
+            .map(|state| match state {
+                SlotState::Locked(_) => 1,
+                _ => 0,
+            })
+            .sum()
     }
 
     // Force sets the buff at position as non-locked buff.
     pub fn set_buff(&mut self, pos: usize, buff: &Buff) {
-        self.buffs[pos] = SlotState::Free(buff.clone());
+        self.buffs[pos] = SlotState::Free(*buff);
     }
 
     pub fn lock_first(&mut self) {
@@ -189,6 +206,7 @@ impl Simulation {
     }
 }
 
+// Choose a buff not specified in |buffs|.
 fn choose(buffs: &[Buff]) -> Buff {
     let sum: f64 = buffs.iter().map(|b| b.percent()).sum();
 
@@ -199,7 +217,7 @@ fn choose(buffs: &[Buff]) -> Buff {
     for b in buffs.iter() {
         let next_threshold = accum + b.percent();
         if value < next_threshold {
-            return b.clone();
+            return *b;
         }
         accum = next_threshold;
     }
@@ -236,15 +254,13 @@ fn additional_slots() -> AdditionalSlots {
 
 fn main() {
     simulation::simulation_slots_shown_distribution();
-    println!("sim num cusmods");
-    simulation::simulation_num_cus_mod_for_specific();
     println!("sim num cusmods with locking");
-    simulation::simulation_num_cus_mods_with_locking();
-    println!("sim first desired buff locked");
     simulation::simulation_first_desired_buff_locked();
     println!("sim second desired buff locked");
     simulation::simulation_second_desired_buff_locked();
     simulation::suite_two_desired_buffs();
+    simulation::suite_two_desired_buffs_custom_mod_usage();
+    simulation::suite_two_desired_buffs_custom_mod_usage_with_locking()
 }
 
 #[cfg(test)]
@@ -393,9 +409,10 @@ mod test {
         assert_eq!(sim.custom_modules, 1);
 
         sim.lock_first();
+        assert_eq!(sim.custom_modules, 3);
         sim.reroll();
 
-        assert_eq!(sim.custom_modules, 3);
+        assert_eq!(sim.custom_modules, 5);
     }
 
     // Verify that locking the first slot and rerolling should consume more custom modules.
@@ -406,6 +423,7 @@ mod test {
 
         assert_eq!(sim.custom_modules, 1);
         sim.lock_first();
+        assert_eq!(sim.custom_modules, 3);
 
         // Modify the buffs (internal state) so the second buff can be locked.
         // Making sure that the second buff does not collide with the first buff.
@@ -415,9 +433,10 @@ mod test {
             sim.set_buff(1, &Buff::Attack);
         }
         sim.lock_second();
+        assert_eq!(sim.custom_modules, 6);
 
         sim.reroll();
 
-        assert_eq!(sim.custom_modules, 4);
+        assert_eq!(sim.custom_modules, 9);
     }
 }
