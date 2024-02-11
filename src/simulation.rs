@@ -178,20 +178,24 @@ fn simulation_num_custom_modules_for_specific_buffs(want: &[Buff]) {
     let attempts = 100000;
 
     let mut sum_custom_mods = 0;
+    let mut histogram = Histogram::<u32>::new(3).unwrap();
 
     for _ in 0..attempts {
         let mut sim = Simulation::new();
         reroll_until_all_found(&mut sim, &want);
         sum_custom_mods += sim.custom_modules;
+        histogram += sim.custom_modules as u64;
     }
 
     println!(
         "To get all {} for {attempts} times: \n\
         \t{} custom moduies were used.\n\
-        \tThat is on average {} modules.",
+        \tAverage: {:.3} modules.\n\
+        \tStd dev: {:.3} modules.",
         buffs_to_string(want.iter()),
         sum_custom_mods,
-        sum_custom_mods as f64 / attempts as f64
+        histogram.mean(),
+        histogram.stdev(),
     );
 }
 
@@ -227,8 +231,8 @@ pub fn simulation_num_cus_mods_with_locking(want: &[Buff]) {
     println!(
         "To get all {} for {} times:\n\
         \t{} custom mods were used.\n\
-        \tThat is on average {:.3} modules .\n\
-        \tStd dev: {:.3}",
+        \tAverage: {:.3} modules.\n\
+        \tStd dev: {:.3} modules.",
         buffs_to_string(want.iter()),
         attempts,
         sum_custom_mods,
@@ -353,8 +357,8 @@ pub fn simulation_with_locked_buff(locked_buff: Buff, position: usize, want_rest
         "With {} locked on slot {} \
         plus getting {} for {} times:\n\
         \t{} custom mods were used.\n\
-        \tThat is on average {:.3} modules.\n\
-        \tStd dev: {:.3}",
+        \tAverage: {:.3} modules.\n\
+        \tStd dev: {:.3} modules.",
         buffs_to_string([locked_buff].iter()),
         position + 1,
         buffs_to_string(want.iter()),
