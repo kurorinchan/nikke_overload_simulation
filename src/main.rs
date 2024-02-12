@@ -8,7 +8,7 @@ use strum_macros::EnumIter;
 
 mod simulation;
 
-const MAX_LOCK_COUNT: i32 = 2;
+const MAX_LOCK_COUNT: u32 = 2;
 
 #[derive(Assoc, EnumIter, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[func(pub fn percent(&self) -> f64)]
@@ -51,8 +51,8 @@ enum SlotState {
 }
 
 struct Simulation {
-    custom_modules: i32,
-    attempts: i32,
+    custom_modules: u32,
+    attempts: u32,
     buffs: Vec<SlotState>,
 }
 
@@ -178,7 +178,7 @@ impl Simulation {
         }
     }
 
-    fn locked_count(&self) -> i32 {
+    fn locked_count(&self) -> u32 {
         self.buffs
             .iter()
             .map(|state| match state {
